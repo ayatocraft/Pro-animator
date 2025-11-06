@@ -31,7 +31,7 @@ input { padding: 8px; width: 90%; border: none; border-radius: 6px; margin: 8px 
     <br>
     <button onclick="addUser()">追加</button>
     <button onclick="toggleDeleteMode()">削除</button>
-    <button onclick="goToSettings()">お試しする</button>
+    <button onclick="goToSettings()">設定</button>
     <h3>ユーザー一覧</h3>
     <div class="user-list" id="userList"></div>
   </div>
@@ -91,7 +91,7 @@ function deleteSelected() {
 
 function goToSettings() {
   localStorage.setItem('currentUser', null);
-  location.href = "home.html"; // 次ページでパスワード設定など
+  location.href = "settings.html"; // 次ページでパスワード設定など
 }
 
 function login(name) {
@@ -103,5 +103,6 @@ renderUsers();
 </script>
 </body>
 </html>
+
 
 
