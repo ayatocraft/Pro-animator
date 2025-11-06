@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Animator App - 編集</title>
+<link rel="manifest" href="manifest.json">
+<style>
+body {
+  margin: 0; font-family: "Segoe UI", sans-serif;
+  background: #121212; color: white;
+  display: flex; flex-direction: column; height: 100vh; overflow: hidden;
+}
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  background: #1e1e1e; padding: 10px 20px;
+}
+header div { display: flex; align-items: center; gap: 10px; }
+button {
+  background: #2e89ff; color: white; border: none; border-radius: 6px;
+  padding: 6px 12px; cursor: pointer; transition: 0.2s;
+}
+button:hover { background: #1976d2; }
+#canvasContainer {
+  flex: 1; position: relative; background: #222;
+  display: flex; justify-content: center; align-items: center;
+}
+canvas {
+  background: #fff; border-radius: 10px;
+  touch-action: none; /* for touch draw */
+}
+#toolbar, #bottomBar {
+  display: flex; align-items: center; gap: 10px; background: #1e1e1e;
+  padding: 10px; overflow-x: auto;
+}
+#bottomBar { justify-content: center; }
+.color-picker { width: 24px; height: 24px; border-radius: 4px; cursor: pointer; }
+#textInput {
+  position: absolute; display: none;
+  background: transparent; border: none; color: black;
+  font-size: 20px; outline: none;
+}
+#loading {
+  position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+  display: none; align-items: center; justify-content: center;
+  background: rgba(0,0,0,0.5); font-size: 1.2em;
+}
+input[type="range"] { width: 100px; }
+</style>
+</head>
+<body>
+<header>
+  <div>
+    <button onclick="back()">← 戻る</button>
+    <span id="pageLabel">1/1</span>
+  </div>
+  <div>
+    <button onclick="toggleMode()" id="modeBtn">🎨 編集モード</button>
+    <button onclick="copyFrame()">📋 コピー</button>
+    <button onclick="pasteFrame()">📄 ペースト</button>
+  </div>
+</header>
+
+<div id="toolbar">
+  <label>太さ <input type="range" id="penSize" min="1" max="20" value="4"></label>
+  <select id="penStyle">
+    <option value="pen">ペン</option>
+    <option value="brush">筆</option>
+    <option value="pencil">鉛筆</option>
+    <option value="crayon">クレパス</option>
+    <option value="eraser">消しゴム</option>
+  </select>
+  <div id="colorPalette"></div>
+  <input type="color" id="colorPicker" value="#000000">
+  <button onclick="addText()">🅣 テキスト</button>
+  <button onclick="toggleOnion()">🌫️ 透かし</button>
+</div>
+
+<div id="canvasContainer">
+  <canvas id="drawCanvas" width="800" height="600"></canvas>
+  <input id="textInput" type="text" />
+  <div id="loading">🔄 お待ちください...</div>
+</div>
+
+<div id="bottomBar">
+  <button onclick="prevFrame()">⟨ 前へ</button>
+  <span id="frameInfo">1/1</span>
+  <button onclick="nextFrame()">次へ ⟩</button>
+  <button onclick="addFrame()">＋ 新しい絵</button>
+  <button onclick="togglePlay()" id="playBtn">▶ 再生</button>
+  <label>速度 <input type="number" id="fps" value="5" min="1" max="60"> fps</label>
+  <button onclick="exportVideo()">🎞️ エクスポート</button>
+</div>
+
+<script>
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+
+let users = JSON.parse(localStorage.getItem('users') || '[]');
+let currentUser = localStorage.getItem('currentUser');
+let currentProjectName = localStorage.getItem('currentProject');
+let user = users.find(u => u.name === currentUser);
+if (!user) location.href = "index.html";
+let project = user.projects.find(p => p.name === currentProjectName);
+if (!project) location.href = "home.html";
+if (!project.frames) project.frames = [];
+
+const canvas = document.getElementById('drawCanvas');
+const ctx = canvas.getContext('2d');
+let drawing = false, mode = "edit";
+let onion = false;
+let currentFrame = 0;
+let penColor = "#000000";
+let penSize = 4;
+let penStyle = "pen";
+let paths = project.frames[currentFrame]?.draw || [];
+let texts = project.frames[currentFrame]?.text || [];
+let copiedFrame = null;
+
+function saveProject() {
+  project.frames[currentFrame] = { draw: paths, text: texts };
+  const idx = user.projects.findIndex(p => p.name === project.name);
+  user.projects[idx] = project;
+  const uidx = users.findIndex(u => u.name === currentUser);
+  users[uidx] = user;
+  localStorage.setItem('users', JSON.stringify(users));
+}
+
+function render() {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  if (onion && currentFrame>0) {
+    const prev = project.frames[currentFrame-1];
+    if (prev) {
+      ctx.globalAlpha = 0.3;
+      prev.draw.forEach(p => drawPath(p));
+      ctx.globalAlpha = 1.0;
+    }
+  }
+  paths.forEach(p => drawPath(p));
+  texts.forEach(t => drawText(t));
+  document.getElementById('frameInfo').textContent = `${currentFrame+1}/${project.frames.length}`;
+  document.getElementById('pageLabel').textContent = `${currentFrame+1}/${project.frames.length}`;
+}
+function drawPath(p) {
+  ctx.strokeStyle = p.color;
+  ctx.lineWidth = p.size;
+  ctx.beginPath();
+  ctx.moveTo(p.points[0].x,p.points[0].y);
+  p.points.forEach(pt=>ctx.lineTo(pt.x,pt.y));
+  ctx.stroke();
+}
+function drawText(t) {
+  ctx.font = "20px sans-serif";
+  ctx.fillStyle = "black";
+  ctx.fillText(t.text, t.x, t.y);
+}
+
+canvas.addEventListener('pointerdown', e=>{
+  if (mode!=="edit") return;
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left, y = e.clientY - rect.top;
+  drawing = true;
+  if (penStyle==="eraser") {
+    paths = paths.filter(p=>!p.points.some(pt=>Math.abs(pt.x-x)<penSize && Math.abs(pt.y-y)<penSize));
+    render(); return;
+  }
+  const newPath = { color: penColor, size: penSize, style: penStyle, points:[{x,y}] };
+  paths.push(newPath);
+});
+canvas.addEventListener('pointermove', e=>{
+  if (!drawing || penStyle==="eraser") return;
+  const rect = canvas.getBoundingClientRect();
+  const x = e.clientX - rect.left, y = e.clientY - rect.top;
+  const path = paths[paths.length-1];
+  path.points.push({x,y});
+  render();
+});
+canvas.addEventListener('pointerup', ()=>{ drawing=false; saveProject(); });
+
+document.getElementById('penSize').oninput = e=> penSize = +e.target.value;
+document.getElementById('penStyle').onchange = e=> penStyle = e.target.value;
+document.getElementById('colorPicker').oninput = e=> penColor = e.target.value;
+
+function generatePalette() {
+  const colors = ["#000","#fff","#f00","#0f0","#00f","#ff0","#0ff","#f0f",
+                  "#800","#080","#008","#880","#088","#808","#ccc","#888"];
+  const cont = document.getElementById('colorPalette');
+  colors.forEach(c=>{
+    const div = document.createElement('div');
+    div.className="color-picker"; div.style.background=c;
+    div.onclick=()=>{penColor=c; document.getElementById('colorPicker').value=c;};
+    cont.appendChild(div);
+  });
+}
+generatePalette();
+
+function addFrame() {
+  saveProject();
+  project.frames.push({ draw:[], text:[] });
+  currentFrame = project.frames.length-1;
+  paths=[]; texts=[];
+  saveProject(); render();
+}
+
+function prevFrame() {
+  if (currentFrame>0) { saveProject(); currentFrame--; loadFrame(); }
+}
+function nextFrame() {
+  if (currentFrame<project.frames.length-1) { saveProject(); currentFrame++; loadFrame(); }
+}
+function loadFrame() {
+  const f = project.frames[currentFrame];
+  paths = f.draw; texts = f.text;
+  render();
+}
+
+function addText() {
+  const textBox = document.getElementById("textInput");
+  textBox.style.display = "block";
+  textBox.style.left = "100px"; textBox.style.top = "100px";
+  textBox.value = "";
+  textBox.focus();
+  textBox.onblur = ()=>{
+    texts.push({text:textBox.value, x:parseInt(textBox.style.left), y:parseInt(textBox.style.top)});
+    textBox.style.display="none";
+    saveProject(); render();
+  };
+  textBox.onpointerdown = e=>{
+    let offsetX=e.offsetX, offsetY=e.offsetY;
+    textBox.onpointermove=ev=>{
+      textBox.style.left = (ev.pageX-offsetX)+"px";
+      textBox.style.top = (ev.pageY-offsetY)+"px";
+    };
+    textBox.onpointerup=()=>textBox.onpointermove=null;
+  };
+}
+
+function toggleOnion(){ onion=!onion; render(); }
+function copyFrame(){ copiedFrame = JSON.parse(JSON.stringify(project.frames[currentFrame])); }
+function pasteFrame(){
+  if (copiedFrame) {
+    project.frames[currentFrame] = JSON.parse(JSON.stringify(copiedFrame));
+    loadFrame(); saveProject();
+  }
+}
+
+let playTimer=null;
+function togglePlay(){
+  if (playTimer) {
+    clearInterval(playTimer); playTimer=null;
+    document.getElementById("playBtn").textContent="▶ 再生";
+    mode="edit"; document.getElementById("modeBtn").textContent="🎨 編集モード";
+    return;
+  }
+  mode="play";
+  document.getElementById("modeBtn").textContent="🎬 再生モード";
+  let fps = +document.getElementById("fps").value;
+  let f=0;
+  playTimer = setInterval(()=>{
+    currentFrame = f % project.frames.length;
+    loadFrame();
+    f++;
+  },1000/fps);
+  document.getElementById("playBtn").textContent="⏸ 停止";
+}
+
+function toggleMode(){
+  mode = (mode==="edit")?"play":"edit";
+  document.getElementById("modeBtn").textContent = mode==="edit"?"🎨 編集モード":"🎬 再生モード";
+}
+
+function exportVideo(){
+  document.getElementById("loading").style.display="flex";
+  const fps = +document.getElementById("fps").value;
+  const stream = canvas.captureStream(fps);
+  const recorder = new MediaRecorder(stream);
+  const chunks = [];
+  recorder.ondataavailable = e=>chunks.push(e.data);
+  recorder.onstop = ()=>{
+    const blob = new Blob(chunks,{type:"video/mp4"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href=url;
+    a.download=`${project.name}.mp4`;
+    a.click();
+    document.getElementById("loading").style.display="none";
+  };
+  recorder.start();
+  let f=0;
+  const play = setInterval(()=>{
+    currentFrame = f % project.frames.length;
+    loadFrame();
+    f++;
+    if(f>project.frames.length*fps){
+      clearInterval(play);
+      recorder.stop();
+    }
+  },1000/fps);
+}
+
+function back(){ saveProject(); location.href="home.html"; }
+render();
+</script>
+</body>
+</html>

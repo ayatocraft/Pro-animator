@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Animator App - ユーザー選択</title>
+<link rel="manifest" href="manifest.json">
+<style>
+body {
+  margin: 0; font-family: "Segoe UI", sans-serif;
+  background: #121212; color: white; text-align: center;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh;
+}
+.container { background: #1e1e1e; padding: 20px; border-radius: 16px; width: 320px; box-shadow: 0 0 10px #000; }
+h1 { margin-bottom: 10px; }
+button { background: #2e89ff; color: white; border: none; padding: 10px 20px; border-radius: 8px; cursor: pointer; margin: 5px; }
+button:hover { background: #1976d2; }
+input { padding: 8px; width: 90%; border: none; border-radius: 6px; margin: 8px 0; }
+.user-list { margin-top: 10px; text-align: left; }
+.user { background: #222; padding: 8px; border-radius: 6px; margin: 5px 0; cursor: pointer; }
+.user:hover { background: #333; }
+.delete-mode .user { display: flex; align-items: center; }
+.delete-mode input[type=checkbox] { margin-right: 10px; }
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>Animator App</h1>
+  <div id="mode-normal">
+    <input type="text" id="newUserName" placeholder="新しいユーザー名">
+    <br>
+    <button onclick="addUser()">追加</button>
+    <button onclick="toggleDeleteMode()">削除</button>
+    <button onclick="goToSettings()">ユーザー設定</button>
+    <h3>ユーザー一覧</h3>
+    <div class="user-list" id="userList"></div>
+  </div>
+  <div id="mode-delete" style="display:none;">
+    <h3>削除モード</h3>
+    <div class="user-list" id="deleteList"></div>
+    <button onclick="deleteSelected()">削除</button>
+    <button onclick="toggleDeleteMode()">戻る</button>
+  </div>
+</div>
+
+<script>
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+
+let users = JSON.parse(localStorage.getItem('users') || '[]');
+let deleteMode = false;
+
+function renderUsers() {
+  const list = document.getElementById(deleteMode ? "deleteList" : "userList");
+  list.innerHTML = "";
+  users.forEach(u => {
+    const div = document.createElement('div');
+    div.className = "user";
+    if (deleteMode) {
+      div.innerHTML = `<input type="checkbox" value="${u.name}"> ${u.name}`;
+    } else {
+      div.textContent = u.name;
+      div.onclick = () => login(u.name);
+    }
+    list.appendChild(div);
+  });
+}
+
+function addUser() {
+  const name = document.getElementById("newUserName").value.trim();
+  if (!name) return alert("名前を入力してください。");
+  if (users.some(u => u.name === name)) return alert("この名前は既に存在します。");
+  users.push({ name, projects: [] });
+  localStorage.setItem('users', JSON.stringify(users));
+  document.getElementById("newUserName").value = "";
+  renderUsers();
+}
+
+function toggleDeleteMode() {
+  deleteMode = !deleteMode;
+  document.getElementById("mode-normal").style.display = deleteMode ? "none" : "block";
+  document.getElementById("mode-delete").style.display = deleteMode ? "block" : "none";
+  renderUsers();
+}
+
+function deleteSelected() {
+  const checked = [...document.querySelectorAll("#deleteList input:checked")].map(i => i.value);
+  users = users.filter(u => !checked.includes(u.name));
+  localStorage.setItem('users', JSON.stringify(users));
+  toggleDeleteMode();
+}
+
+function goToSettings() {
+  localStorage.setItem('currentUser', null);
+  location.href = "settings.html"; // 次ページでパスワード設定など
+}
+
+function login(name) {
+  localStorage.setItem('currentUser', name);
+  location.href = "home.html";
+}
+
+renderUsers();
+</script>
+</body>
+</html>
