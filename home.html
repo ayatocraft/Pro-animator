@@ -2,166 +2,65 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Animator App - ホーム</title>
-<link rel="manifest" href="manifest.json">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Animator Pro - Home</title>
 <style>
-body {
-  margin: 0; font-family: "Segoe UI", sans-serif;
-  background: #121212; color: white;
-  display: flex; height: 100vh; overflow: hidden;
-}
-.sidebar {
-  width: 220px; background: #1e1e1e; padding: 15px;
-  display: flex; flex-direction: column; gap: 10px;
-}
-button {
-  background: #2e89ff; color: white; border: none;
-  border-radius: 8px; padding: 10px; cursor: pointer;
-  transition: 0.2s; width: 100%;
-}
-button:hover { background: #1976d2; }
-.main {
-  flex: 1; padding: 20px; overflow-y: auto;
-}
-.project-grid {
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 20px;
-}
-.project-card {
-  background: #222; padding: 10px; border-radius: 10px; text-align: center;
-  transition: 0.2s;
-}
-.project-card img { width: 100%; border-radius: 8px; background: #333; }
-.project-card:hover { background: #333; cursor: pointer; }
-.header { font-size: 1.4em; margin-bottom: 10px; }
-.trash-mode { color: #ff5252; font-weight: bold; }
-.hidden { display: none; }
+body{margin:0;font-family:"Segoe UI","Noto Sans JP",sans-serif;display:flex;height:100vh;background:#f5f7fa;}
+.sidebar{width:240px;background:#0078d7;color:#fff;padding:20px;display:flex;flex-direction:column;}
+.sidebar button{margin:6px 0;padding:10px;border:none;border-radius:8px;background:#fff;color:#0078d7;font-weight:bold;cursor:pointer;}
+.main{flex:1;padding:20px;overflow:auto;}
+.project{background:#fff;padding:16px;border-radius:12px;margin:10px 0;display:flex;justify-content:space-between;align-items:center;box-shadow:0 2px 6px rgba(0,0,0,0.1);}
+.project input{font-size:1em;border:none;background:transparent;width:60%;}
 </style>
 </head>
 <body>
 <div class="sidebar">
-  <button onclick="addProject()">＋ 新しいプロジェクト</button>
-  <button onclick="toggleTrash()">🗑️ ゴミ箱</button>
-  <button onclick="openTemplates()">📁 テンプレートを見る</button>
-  <button onclick="openImport()">📂 読み込み</button>
-  <button onclick="openBackup()">💾 バックアップ</button>
+  <h2>🎬 Animator Pro</h2>
+  <button onclick="newProject()">＋ 新規プロジェクト</button>
+  <button onclick="location.href='backup.html'">💾 バックアップ</button>
   <button onclick="logout()">🚪 ログアウト</button>
 </div>
-
-<div class="main">
-  <div class="header" id="pageTitle">プロジェクト一覧</div>
-  <div class="project-grid" id="projectGrid"></div>
-</div>
+<div class="main" id="projectList"></div>
 
 <script>
-if ('serviceWorker' in navigator) navigator.serviceWorker.register('sw.js');
+let user = localStorage.getItem("currentUser") || "default";
+let projects = JSON.parse(localStorage.getItem(user+"_projects")||"[]");
 
-let currentUser = localStorage.getItem('currentUser');
-if (!currentUser) location.href = "index.html";
-
-let users = JSON.parse(localStorage.getItem('users') || '[]');
-let user = users.find(u => u.name === currentUser);
-if (!user) location.href = "index.html";
-
-let trashMode = false;
-
-function renderProjects() {
-  const grid = document.getElementById("projectGrid");
-  grid.innerHTML = "";
-  const projects = trashMode ? (user.trash || []) : user.projects;
-  projects.forEach((p, i) => {
-    const card = document.createElement("div");
-    card.className = "project-card";
-    card.innerHTML = `
-      <img src="${p.thumbnail || ''}" alt="">
-      <div>${p.name}</div>
-      ${trashMode ? `<button onclick="restore(${i})">復元</button>` : `<button onclick="remove(${i})">削除</button>`}
+function saveProjects(){localStorage.setItem(user+"_projects",JSON.stringify(projects));}
+function renderProjects(){
+  let list=document.getElementById("projectList");
+  list.innerHTML="";
+  projects.forEach((p,i)=>{
+    let div=document.createElement("div");
+    div.className="project";
+    div.innerHTML=`
+      <input value="${p.name}" onchange="renameProject(${i},this.value)">
+      <button onclick="openProject(${i})">開く</button>
+      <button onclick="deleteProject(${i})">🗑️</button>
     `;
-    card.onclick = () => {
-      if (!trashMode) {
-        localStorage.setItem('currentProject', p.name);
-        location.href = "project.html";
-      }
-    };
-    grid.appendChild(card);
+    list.appendChild(div);
   });
 }
-
-function saveUsers() {
-  const idx = users.findIndex(u => u.name === currentUser);
-  users[idx] = user;
-  localStorage.setItem('users', JSON.stringify(users));
-}
-
-function addProject() {
-  let name = "新しいプロジェクト";
-  const names = user.projects.map(p => p.name);
-  let n = 1;
-  while (names.includes(name)) { name = `新しいプロジェクト(${n++})`; }
-  user.projects.push({ name, frames: [], thumbnail: "" });
-  saveUsers();
+function newProject(){
+  let name="新しいプロジェクト";
+  let count=1;
+  while(projects.some(p=>p.name===name)) name=`新しいプロジェクト(${count++})`;
+  projects.push({name,frames:[]});
+  saveProjects();
   renderProjects();
 }
-
-function remove(i) {
-  if (!user.trash) user.trash = [];
-  user.trash.push(user.projects[i]);
-  user.projects.splice(i, 1);
-  saveUsers(); renderProjects();
+function renameProject(i,newName){
+  projects[i].name=newName;
+  saveProjects();
 }
-
-function restore(i) {
-  user.projects.push(user.trash[i]);
-  user.trash.splice(i, 1);
-  saveUsers(); renderProjects();
+function openProject(i){
+  localStorage.setItem(user+"_currentProject",JSON.stringify(projects[i]));
+  location.href="project.html";
 }
-
-function toggleTrash() {
-  trashMode = !trashMode;
-  document.getElementById("pageTitle").textContent = trashMode ? "ゴミ箱" : "プロジェクト一覧";
-  renderProjects();
+function deleteProject(i){
+  if(confirm("削除しますか？")){projects.splice(i,1);saveProjects();renderProjects();}
 }
-
-function openTemplates() {
-  // テンプレートプロジェクトを生成
-  const name = "テンプレートアニメ";
-  if (!user.projects.some(p => p.name === name)) {
-    user.projects.push({
-      name, thumbnail: "", frames: [{draw:[],text:[],time:100}],
-      template:true
-    });
-    saveUsers();
-  }
-  localStorage.setItem('currentProject', name);
-  location.href = "project.html";
-}
-
-function openImport() {
-  const input = document.createElement("input");
-  input.type = "file";
-  input.accept = ".json,.aep";
-  input.onchange = e => {
-    const file = e.target.files[0];
-    const reader = new FileReader();
-    reader.onload = () => {
-      try {
-        const data = JSON.parse(reader.result);
-        const name = file.name.replace(/\.[^/.]+$/, "");
-        user.projects.push({ name, frames: data.frames || [], thumbnail: "" });
-        saveUsers(); renderProjects();
-      } catch {
-        alert("ファイル形式が不正です。");
-      }
-    };
-    reader.readAsText(file);
-  };
-  input.click();
-}
-
-function openBackup() { location.href = "backup.html"; }
-function logout() { location.href = "index.html"; }
-
+function logout(){location.href="index.html";}
 renderProjects();
 </script>
 </body>
